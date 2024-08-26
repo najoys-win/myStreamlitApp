@@ -210,7 +210,7 @@ if st.session_state.display_plot:
 
 
 # MongoDB connection setup
-client = MongoClient("mongodb+srv://htet3win:htet3win@youtubevideoanalysis.cbkiow5.mongodb.net/?retryWrites=true&w=majority&appName=YouTubeVideoAnalysis")
+client = MongoClient("mongodb+srv://htet3win:htet3winforyoutube@youtubevideoanalysis.cbkiow5.mongodb.net/?retryWrites=true&w=majority&appName=YouTubeVideoAnalysis")
 db = client.usersdata
 users = db.auth
 
