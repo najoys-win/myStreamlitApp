@@ -210,9 +210,9 @@ if st.session_state.display_plot:
 
 
 # MongoDB connection setup
-client = MongoClient("mongodb://localhost:27017/")
-db = client.mydb
-users = db.users
+client = MongoClient("mongodb+srv://htet3win:htet3win@youtubevideoanalysis.cbkiow5.mongodb.net/?retryWrites=true&w=majority&appName=YouTubeVideoAnalysis")
+db = client.usersdata
+users = db.auth
 
 # Initialize YouTube API
 API_KEY = 'AIzaSyAB7IhXukv3OUesHkDQnWTLB-8lIZqON1I'
