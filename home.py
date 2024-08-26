@@ -23,6 +23,18 @@ st.title("YouTube Channel Analytics Dashboard")
 def load_data(path):
     return pd.read_csv(path, parse_dates=['PublishedAt'], usecols=['Title', 'PublishedAt', 'ViewCount', 'LikeCount', 'CommentCount', 'URL'])
 
+
+#base_path = os.getenv('DATA_PATH', 'D:/Master Project/Dissertation')
+base_path = os.getenv('DATA_PATH', './data')
+data_paths = {
+    'Technology': {'Linus Tech Tips': f'{base_path}/Linus Tech Tips.csv', 'Code Nust': f'{base_path}/code nust.csv'},
+    'News': {'BBC News': f'{base_path}/BBC NEWS.csv', 'CNN News': f'{base_path}/CNN NEWS.csv'},
+    'Vlog': {'NicoleRafiee': f'{base_path}/Nicole Rafiee.csv', 'Sydney Serena': f'{base_path}/Sydney Serena.csv'},
+    'Mukbang': {'Hamzy': f'{base_path}/Hamzy.csv', 'ZCM ASMR': f'{base_path}/ZCM ASMR.csv'},
+    'Gaming': {'NinJa': f'{base_path}/NinJa.csv', 'Failboat': f'{base_path}/Failboat.csv'}
+}
+
+
 def format_number(num):
     try:
         num = float(num)
@@ -48,14 +60,6 @@ def plot_data(data, column, ax, title):
     ax.set_ylabel(column)
     ax.grid(True)
 
-base_path = os.getenv('DATA_PATH', 'D:/Master Project/Dissertation')
-data_paths = {
-    'Technology': {'Linus Tech Tips': f'{base_path}/Linus Tips.csv', 'Code Nust': f'{base_path}/code nust.csv'},
-    'News': {'BBC News': f'{base_path}/BBC NEWS.csv', 'CNN News': f'{base_path}/CNN NEWS.csv'},
-    'Vlog': {'NicoleRafiee': f'{base_path}/Nicole Rafiee.csv', 'Sydney Serena': f'{base_path}/Sydney Serena.csv'},
-    'Mukbang': {'Hamzy': f'{base_path}/Hamzy.csv', 'ZCM ASMR': f'{base_path}/ZCM ASMR.csv'},
-    'Gaming': {'NinJa': f'{base_path}/NinJa.csv', 'Failboat': f'{base_path}/Failboat.csv'}
-}
 
 selected_category = st.sidebar.selectbox('Select Category', list(data_paths.keys()))
 selected_channel = st.sidebar.selectbox('Select Channel', list(data_paths[selected_category].keys()))
