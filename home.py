@@ -11,7 +11,10 @@ from dateutil.parser import parse
 from matplotlib.dates import DateFormatter
 from pandas import Timestamp
 import numpy as np
-
+from datetime import datetime
+import matplotlib.dates as mdates
+import re
+from matplotlib.ticker import FuncFormatter
 
 
 # Dashboard setup
@@ -20,11 +23,40 @@ st.set_page_config(page_title="YouTube Channel Analytics", layout="wide")
 # Display a title in the app content
 st.title("YouTube Channel Analytics Dashboard")
 
+# Load data function
 def load_data(path):
     return pd.read_csv(path, parse_dates=['PublishedAt'], usecols=['Title', 'PublishedAt', 'ViewCount', 'LikeCount', 'CommentCount', 'URL'])
 
 
-#base_path = os.getenv('DATA_PATH', 'D:/Master Project/Dissertation')
+def format_number(num):
+    try:
+        # Attempt to convert the input to a float
+        num = float(num)
+    except (ValueError, TypeError):
+        return "N/A"  # Return 'N/A' if conversion fails
+
+    # Now that num is guaranteed to be a float, perform the comparison
+    if num >= 1_000_000:
+        return f"{num / 1_000_000:.1f}M"
+    elif num >= 1_000:
+        return f"{num / 1_000:.1f}K"
+    else:
+        return str(int(num))  # Convert to integer for display without decimal points if less than 1000
+
+
+# Apply formatting to the numeric columns and prepare the table
+def prepare_table(data):
+    data['ViewCount'] = data['ViewCount'].apply(format_number)
+    data['LikeCount'] = data['LikeCount'].apply(format_number)
+    data['URL'] = data['URL'].apply(lambda x: f'<a href="{x}" target="_blank">Watch Video</a>')
+    return data.to_html(escape=False, index=False)
+
+def get_sortable_columns(dataframe):
+    numeric_columns = dataframe.select_dtypes(include=['number']).columns.tolist()
+    datetime_columns = ['PublishedAt']
+    return numeric_columns + datetime_columns
+
+# Define categories and paths
 base_path = os.getenv('DATA_PATH', './data')
 data_paths = {
     'Technology': {'Linus Tech Tips': f'{base_path}/Linus Tech Tips.csv', 'Code Nust': f'{base_path}/code nust.csv'},
@@ -33,131 +65,111 @@ data_paths = {
     'Mukbang': {'Hamzy': f'{base_path}/Hamzy.csv', 'ZCM ASMR': f'{base_path}/ZCM ASMR.csv'},
     'Gaming': {'NinJa': f'{base_path}/NinJa.csv', 'Failboat': f'{base_path}/Failboat.csv'}
 }
-
-
-def format_number(num):
-    try:
-        num = float(num)
-    except (ValueError, TypeError):
-        return "N/A"
-    if num >= 1_000_000:
-        return f"{num / 1_000_000:.1f}M"
-    elif num >= 1_000:
-        return f"{num / 1_000:.1f}K"
-    else:
-        return str(int(num))
-
-def prepare_table(data):
-    data['ViewCount'] = data['ViewCount'].apply(format_number)
-    data['LikeCount'] = data['LikeCount'].apply(format_number)
-    data['URL'] = data['URL'].apply(lambda x: f'<a href="{x}" target="_blank">Watch Video</a>')
-    return data.to_html(escape=False, index=False)
-
-def plot_data(data, column, ax, title):
-    data.set_index('PublishedAt')[column].plot(ax=ax)
-    ax.set_title(title)
-    ax.set_xlabel('Date')
-    ax.set_ylabel(column)
-    ax.grid(True)
-
-
+# User interface for category and channel selection
 selected_category = st.sidebar.selectbox('Select Category', list(data_paths.keys()))
 selected_channel = st.sidebar.selectbox('Select Channel', list(data_paths[selected_category].keys()))
 df_path = data_paths[selected_category][selected_channel]
-
 try:
     df = load_data(df_path)
 except Exception as e:
     st.error(f"Failed to load data: {str(e)}")
     st.stop()
 
-date_range = st.sidebar.date_input("Define the timeframe: ", [])
+# Date range selection
+st.sidebar.write("Define the timeframe: ")
+
+df['PublishedAt'] = pd.to_datetime(df['PublishedAt'], errors='coerce', format='%Y-%m-%dT%H:%M:%SZ')
+
+
+date_range = st.sidebar.date_input("1-1-2022 to 31-3-2024", [])
 
 if date_range:
     start_date, end_date = date_range
-    # Ensure both dates are timezone-aware and match the DataFrame's timezone.
-    start_date = Timestamp(start_date).tz_localize('UTC')
-    end_date = Timestamp(end_date).tz_localize('UTC')
+    start_date = pd.Timestamp(start_date)
+    end_date = pd.Timestamp(end_date)
+    df['PublishedAt'] = pd.to_datetime(df['PublishedAt'])
+    # Filter the data based on the date range
     filtered_data = df[(df['PublishedAt'] >= start_date) & (df['PublishedAt'] <= end_date)]
-    
+
     if not filtered_data.empty:
-        st.markdown("## Summary Metrics")
         total_views = format_number(filtered_data['ViewCount'].sum())
         total_likes = format_number(filtered_data['LikeCount'].sum())
         total_comments = format_number(filtered_data['CommentCount'].sum())
         total_videos = format_number(filtered_data.shape[0])
-        
+
+        st.markdown("## Summary Metrics")
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("Total Views", total_views)
         col2.metric("Total Likes", total_likes)
         col3.metric("Total Comments", total_comments)
         col4.metric("Total Videos", total_videos)
 
-        # Create two columns for the table and chart
+        sortable_columns = get_sortable_columns(filtered_data)
+        selected_sorting = st.sidebar.selectbox('Sort Videos By', sortable_columns)
+        sorted_data = filtered_data.sort_values(by=selected_sorting, ascending=False).head(10)
+        sorted_data['URL'] = sorted_data['URL'].apply(lambda x: f'<a href="{x}" target="_blank">Watch Video</a>')
+
         col1, col2 = st.columns(2)
-        
-                # Display the table in the first column
-        # Display the table in the first column
+
         with col1:
-            st.markdown("## Video Performance Over Time")
+            st.markdown("## Video View Count Over Time")
             fig, ax = plt.subplots()
-            # Applying theme colors from config.toml
-            background_color = "#00172B"  # Dark blue
-            primary_color = "#154C79"     # Lighter blue for the line
-            text_color = "#ffff"        # White text for better readability
-            # Set plot and background colors
-            ax.set_facecolor(background_color)
-            ax.figure.set_facecolor(background_color)
-            # Plotting the data with theme primary color
-            filtered_data.set_index('PublishedAt')['ViewCount'].plot(ax=ax, color=primary_color)
-            # Setting title and labels with the theme text color
-            ax.set_title('Video ViewCount Over Time', color=text_color)
-            ax.set_xlabel('Date', color=text_color)
-            ax.set_ylabel('ViewCount', color=text_color)
-            # Customizing tick parameters
-            ax.tick_params(axis='x', colors=text_color)
-            ax.tick_params(axis='y', colors=text_color)
-            # Adding grid with a lighter tone
-            #ax.grid(True, color="#639700")  # Using secondary background color for grid
+            ax.set_facecolor("#00172B")
+            fig.patch.set_facecolor("#00172B")
+            filtered_data.set_index('PublishedAt')['ViewCount'].plot(kind='bar', ax=ax, color="#154C79", width=0.8)
+            ax.set_title('Video ViewCount Over Time', color="#FFFFFF")
+            ax.set_xlabel('Date', color="#FFFFFF")
+            ax.set_ylabel('ViewCount', color="#FFFFFF")
+            ax.tick_params(axis='x', colors="#FFFFFF", rotation=45)
+            ax.tick_params(axis='y', colors="#FFFFFF")
+            ax.set_ylim(bottom=0)
+            # Improve the readability of the x-axis dates
+            plt.xticks(rotation=45, ha='right')  # Rotate the labels for better visibility
+            plt.tight_layout()  # Adjust layout to make room for label rotation
+
+            plt.show()
             st.pyplot(fig)
 
         with col2:
-            st.markdown("## Video Performance Over Time")
+            st.markdown("## Video Like Count Over Time")
             fig, ax = plt.subplots()
-            # Applying theme colors from config.toml
-            background_color = "#00172B"  # Dark blue
-            primary_color = "#154C79"     # Lighter blue for the line
-            text_color = "#ffff"        # White text for better readability
-            # Set plot and background colors
-            ax.set_facecolor(background_color)
-            ax.figure.set_facecolor(background_color)
-            # Plotting the data with theme primary color
-            filtered_data.set_index('PublishedAt')['LikeCount'].plot(ax=ax, color=primary_color)
-            # Setting title and labels with the theme text color
-            ax.set_title('Video LikeCount Over Time', color=text_color)
-            ax.set_xlabel('Date', color=text_color)
-            ax.set_ylabel('LikeCount', color=text_color)
-            # Customizing tick parameters
-            ax.tick_params(axis='x', colors=text_color)
-            ax.tick_params(axis='y', colors=text_color)
-            # Adding grid with a lighter tone
-            #ax.grid(True, color="#639700")  # Using secondary background color for grid
+            ax.set_facecolor("#00172B")
+            fig.patch.set_facecolor("#00172B")
+            filtered_data.set_index('PublishedAt')['LikeCount'].plot(kind='bar', ax=ax, color="#154C79", width=0.8)
+            ax.set_title('Video LikeCount Over Time', color="#FFFFFF")
+            ax.set_xlabel('Date', color="#FFFFFF")
+            ax.set_ylabel('LikeCount', color="#FFFFFF")
+            ax.tick_params(axis='x', colors="#FFFFFF", rotation=45)
+            ax.tick_params(axis='y', colors="#FFFFFF")
+            ax.set_ylim(bottom=0)
+            
+            # Improve the readability of the x-axis dates
+            plt.xticks(rotation=45, ha='right')  # Rotate the labels for better visibility
+            plt.tight_layout()  # Adjust layout to make room for label rotation
+
+            plt.show()
             st.pyplot(fig)
 
-        sorted_data = filtered_data.sort_values(by='ViewCount', ascending=False).head(5)
-        html = prepare_table(sorted_data)
+
+        
+        # Sort the data based on user selection
+        sorted_data = filtered_data.sort_values(by=selected_sorting, ascending=False).head(5)
+    
+        # Prepare the HTML table with formatted numbers
+        html = prepare_table(sorted_data.copy())  # Use copy to avoid SettingWithCopyWarning
         st.markdown("## Top 5 Videos", unsafe_allow_html=True)
         st.markdown(html, unsafe_allow_html=True)
+
     else:
         st.error("No data available for the selected date range.")
         nearest_date = df['PublishedAt'].min()
         st.info(f"Try starting from {nearest_date.strftime('%Y-%m-%d')}")
 
 
-# MongoDB setup
-client = MongoClient("mongodb://localhost:27017/")
-db = client['mdb']
-collection = db['future']
+# Connect to MongoDB (replace 'mongodb_uri' with your actual MongoDB connection string)
+client = MongoClient('mongodb+srv://htet3win:htet3winforyoutube@youtubevideoanalysis.cbkiow5.mongodb.net/?retryWrites=true&w=majority&appName=YouTubeVideoAnalysis')  # Example: 'mongodb://localhost:27017/'
+db = client['mydb']  # Replace with your database name
+collection = db['preddata']  # Replace with your collection name
 
 
 import matplotlib.pyplot as plt
@@ -179,7 +191,7 @@ if st.sidebar.button("Predict Future Views"):
         future_dates = pd.date_range(last_date + pd.Timedelta(days=1), periods=len(prediction_data), freq='D')
         
         # Extract the future viewing predictions
-        future_views = [item['FutureViewing'] for item in prediction_data]
+        future_views = [item['PredictedViewCount'] for item in prediction_data]
         
         # Store the plot data in session state
         st.session_state.plot_data = (future_dates, future_views)
@@ -187,7 +199,14 @@ if st.sidebar.button("Predict Future Views"):
     else:
         st.error(f"No prediction data available for {selected_channel}.")
 
-# Display the plot if flag is set
+def custom_formatter(x, pos):
+    if x >= 1e6:  # Values are in millions
+        return f'{x / 1e6:.1f}M'
+    elif x >= 1e3:  # Values are in thousands
+        return f'{x / 1e3:.1f}k'
+    else:
+        return int(x)
+
 if st.session_state.display_plot:
     future_dates, future_views = st.session_state.plot_data
     st.markdown("## Future View Prediction")
@@ -195,8 +214,9 @@ if st.session_state.display_plot:
     ax.plot(future_dates, future_views, marker='o', linestyle='-', linewidth=2, label="Predicted Views", color="#00aaff")
     ax.set_title(f'Predicted Views for {selected_channel}', color="#ffff", fontsize=16)
     ax.set_xlabel('Date', color="#ffff", fontsize=14)
-    ax.set_ylabel('Predicted View Count (Millions)', color="#ffff", fontsize=14)
-    ax.get_yaxis().set_major_formatter(plt.FuncFormatter(lambda x, loc: f"{int(x / 1e6)}M"))
+    ax.set_ylabel('Predicted View Count', color="#ffff", fontsize=14)
+    ax.get_yaxis().set_major_formatter(FuncFormatter(custom_formatter))
+    #ax.get_yaxis().set_major_formatter(FuncFormatter(custom_formatter))
     date_form = DateFormatter("%Y-%m-%d")
     ax.xaxis.set_major_formatter(date_form)
     plt.xticks(rotation=45, ha='right', fontsize=12)
@@ -209,13 +229,11 @@ if st.session_state.display_plot:
 
 
 
-# MongoDB connection setup
-client = MongoClient("mongodb+srv://htet3win:htet3winforyoutube@youtubevideoanalysis.cbkiow5.mongodb.net/?retryWrites=true&w=majority&appName=YouTubeVideoAnalysis")
-db = client.usersdata
-users = db.auth
+userdb = client.usersdata
+userauth = userdb.auth
 
 # Initialize YouTube API
-API_KEY = 'AIzaSyAB7IhXukv3OUesHkDQnWTLB-8lIZqON1I'
+API_KEY = 'AIzaSyBZoP6h7SJJZMHxfLmct0VTly3h5SRxkA8'
 youtube = build('youtube', 'v3', developerKey=API_KEY)
 
 def get_sortable_cols(df):
@@ -232,11 +250,11 @@ def prepare_tb(df):
 
 def create_user(username, password):
     hashed_pw = hashlib.sha256(password.encode()).hexdigest()
-    users.insert_one({"username": username, "password": hashed_pw})
+    userauth.insert_one({"username": username, "password": hashed_pw})
 
 def check_user(username, password):
     hashed_pw = hashlib.sha256(password.encode()).hexdigest()
-    user = users.find_one({"username": username, "password": hashed_pw})
+    user = userauth.find_one({"username": username, "password": hashed_pw})
     return user is not None
 
 def get_channel_id_by_name(channel_name):
@@ -253,33 +271,30 @@ def get_channel_id_by_name(channel_name):
         st.error(f"An HTTP error {e.resp.status} occurred: {e.content}")
         return None
 
-import pandas as pd  # make sure to import pandas at the beginning of your script
-
 def get_videos_in_playlist(playlist_id, start_date, end_date):
+
+    start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+    end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+    
     videos = []
     request = youtube.playlistItems().list(
         part='snippet,contentDetails',
         playlistId=playlist_id,
-        maxResults=50  # Increased to fetch more data per API call
+        maxResults=10
     )
     
     while request is not None:
         response = request.execute()
         for item in response['items']:
             video_date = pd.to_datetime(item['snippet']['publishedAt']).date()
-            # Ensure start_date and end_date are also datetime.date objects
-            if isinstance(start_date, str):
-                start_date = pd.to_datetime(start_date).date()
-            if isinstance(end_date, str):
-                end_date = pd.to_datetime(end_date).date()
-
             if start_date <= video_date <= end_date:
                 videos.append(item['contentDetails']['videoId'])
         request = youtube.playlistItems().list_next(request, response)
     
     return videos
-    
-import re
+
+
+
 
 def convert_duration_to_iso8601(duration):
     if not duration:
@@ -382,12 +397,6 @@ def display_channel_info(channel_info):
     df = pd.DataFrame([channel_info])
     return df.to_html(index=False, escape=False)
 
-def show_videos(video_details):
-    # This function would use the logic similar to what was discussed earlier to generate HTML content
-    html_content = generate_video_display_html(video_details)
-    st.markdown(html_content, unsafe_allow_html=True)
-
-
 def show_analysis():
     channel_name = st.text_input("Enter the Channel Name:")
     start_date = st.date_input("Start Date")
@@ -427,9 +436,6 @@ def show_analysis():
                 st.write("No videos found in the selected timeframe.")
         else:
             st.error("Failed to fetch channel details. Please check the channel name.")
-
-import matplotlib.pyplot as plt
-
 
 
 
@@ -498,7 +504,6 @@ def prepare_and_display_data(df):
 
 
 
-
 def main():
     #st.title("YouTube Channel Analytics")
 
@@ -532,4 +537,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+print(df.columns)  # Check actual column names in the DataFrame
 
