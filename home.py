@@ -17,10 +17,9 @@ import re
 from matplotlib.ticker import FuncFormatter
 
 
-# Dashboard setup
 st.set_page_config(page_title="YouTube Channel Analytics", layout="wide")
 
-# Display a title in the app content
+
 st.title("YouTube Channel Analytics Dashboard")
 
 # Load data function
@@ -33,7 +32,7 @@ def format_number(num):
         # Attempt to convert the input to a float
         num = float(num)
     except (ValueError, TypeError):
-        return "N/A"  # Return 'N/A' if conversion fails
+        return "N/A"  
 
     # Now that num is guaranteed to be a float, perform the comparison
     if num >= 1_000_000:
@@ -166,10 +165,9 @@ if date_range:
         st.info(f"Try starting from {nearest_date.strftime('%Y-%m-%d')}")
 
 
-# Connect to MongoDB (replace 'mongodb_uri' with your actual MongoDB connection string)
 client = MongoClient('mongodb+srv://htet3win:htet3winforyoutube@youtubevideoanalysis.cbkiow5.mongodb.net/?retryWrites=true&w=majority&appName=YouTubeVideoAnalysis')  # Example: 'mongodb://localhost:27017/'
-db = client['mydb']  # Replace with your database name
-collection = db['preddata']  # Replace with your collection name
+db = client['mydb']  
+collection = db['preddata']  
 
 
 import matplotlib.pyplot as plt
@@ -190,12 +188,11 @@ if st.sidebar.button("Predict Future Views"):
         last_date = df['PublishedAt'].max()
         future_dates = pd.date_range(last_date + pd.Timedelta(days=1), periods=len(prediction_data), freq='D')
         
-        # Extract the future viewing predictions
         future_views = [item['PredictedViewCount'] for item in prediction_data]
         
         # Store the plot data in session state
         st.session_state.plot_data = (future_dates, future_views)
-        st.session_state.display_plot = True  # Flag to display the plot
+        st.session_state.display_plot = True  
     else:
         st.error(f"No prediction data available for {selected_channel}.")
 
@@ -232,7 +229,6 @@ if st.session_state.display_plot:
 userdb = client.usersdata
 userauth = userdb.auth
 
-# Initialize YouTube API
 API_KEY = 'AIzaSyBZoP6h7SJJZMHxfLmct0VTly3h5SRxkA8'
 youtube = build('youtube', 'v3', developerKey=API_KEY)
 
@@ -360,7 +356,7 @@ def get_video_details(video_ids):
     max_ids_per_request = 10  # Corrected variable name
     videos_info = []
 
-    # Split the video_ids into chunks of 50
+
     for i in range(0, len(video_ids), max_ids_per_request):
         batch_ids = video_ids[i:i + max_ids_per_request]
         request = youtube.videos().list(
@@ -375,7 +371,6 @@ def get_video_details(video_ids):
                 seconds = int(duration.total_seconds() % 60)
                 formatted_duration = f'{minutes}m {seconds}s'
 
-                # Extracting publishedAt date
                 published_at = item['snippet']['publishedAt']
 
                 videos_info.append({
@@ -415,11 +410,10 @@ def show_analysis():
             st.subheader(f"Analysis - YouTube Channel Details for {channel_title}")
             uploads_playlist_id = channel_details['items'][0]['contentDetails']['relatedPlaylists']['uploads']
             
-            # Fetch all videos for statistics calculations and then filter by date for display
             all_video_ids = get_videos_in_playlist(uploads_playlist_id, "2000-01-01", "2100-01-01")
             all_video_details = get_video_details(all_video_ids)
             
-            # Now fetch and display channel statistics
+            #fetch and display channel statistics
             channel_info = get_channel_statistics(channel_id)
             html_info = display_channel_info(channel_info)
             st.markdown(html_info, unsafe_allow_html=True)
@@ -463,9 +457,6 @@ def prepare_and_display_data(df):
     col2.metric("Total Likes", total_likes)
     col3.metric("Total Comments", total_comments)
     col4.metric("Total Videos", total_videos)
-
-
-    # Continue with plotting and other data handling...
 
 
     sortable_cols = get_sortable_cols(df)
@@ -538,6 +529,4 @@ def main():
 if __name__ == "__main__":
     main()
 
-
-print(df.columns)  # Check actual column names in the DataFrame
 
